@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Linq.Dynamic.Core" Version="1.6.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NetBy.Common\NetBy.Common.csproj" />
+    <ProjectReference Include="..\NetBy.Data\NetBy.Data.csproj" />
+  </ItemGroup>
+
+</Project>

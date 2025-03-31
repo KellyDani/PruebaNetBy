@@ -1,0 +1,572 @@
+﻿@page "/productos"
+
+
+@using NetBy.Common.Response
+@using NetBy.Common.Request
+@using NetBy.Common
+@using NetBy.Proxy
+@using NetBy.WebApp.Models
+
+@inject IProxy _proxy
+@inject IConfiguration _configuration;
+@inject IJSRuntime JSRuntime
+
+<div class="toolbar d-flex justify-content-start align-items-center p-2 bg-light shadow-sm">
+    <button class="btn btn-primary me-2" title="Nuevo" @onclick="CreateNewProduct" disabled="@(editionMode)">
+        <i class="bi bi-file-earmark-plus"></i>
+    </button>
+    <button class="btn btn-warning me-2" title="Editar" @onclick="EditProduct" disabled="@(editionMode)">
+        <i class="bi bi-pencil-square"></i>
+    </button>
+    <button class="btn btn-outline-danger" title="Anular" @onclick="ConfirmDeleteProduct" disabled="@(editionMode)">
+        <i class="bi bi-trash"></i>
+    </button>
+    <button class="btn btn-success me-2" title="Guardar" @onclick="SaveProduct" disabled="@(!editionMode)">
+        <i class="bi bi-save"></i>
+    </button>
+    <button class="btn btn-danger me-2" title="Cancelar" @onclick="CancelEdit" disabled="@(!editionMode)">
+        <i class="bi bi-x-circle"></i>
+    </button>
+
+</div>
+
+<!-- Alerta de éxito -->
+@if (isSuccess)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <strong>¡Éxito!</strong> @alertMessage
+        <button type="button" class="btn-close" @onclick="CloseAlert" aria-label="Close"></button>
+    </div>
+}
+
+<!-- Alerta de error -->
+@if (isError)
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <strong>Error!</strong> @alertMessage
+        <button type="button" class="btn-close" @onclick="CloseAlert" aria-label="Close"></button>
+    </div>
+}
+
+<div class="row">
+    <!-- Columna de la izquierda para la lista -->
+    <div class="col-md-6">
+        <h3>Listado</h3>
+
+        <div class="d-flex justify-content-between align-items-center">
+            <!-- Campo de búsqueda -->
+            <input type="text" class="form-control me-2" placeholder="Buscar productos..."
+                   @bind="searchText"
+                   disabled="@(editionMode)"
+                   @onkeydown="HandleKeyDown" style="flex: 1;" />
+
+            <div class="d-flex">
+                <button class="btn btn-outline-secondary me-2" title="Buscar..." @onclick="SearchProducts" disabled="@(editionMode)">
+                    <i class="bi bi-search"></i>
+                </button>
+                <button class="btn btn-outline-secondary" title="Limpiar..." @onclick="LimpiarFiltro" disabled="@(editionMode)">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="scroll-container">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Nombre</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var producto in productos)
+                    {
+                        <tr @onclick="() => SelectProduct(producto)"
+                            class="@GetRowClass(producto)"
+                            style="@(editionMode ? "pointer-events: none; opacity: 0.5;" : "")">
+                            <td>@producto.Id</td>
+                            <td>@producto.Nombre</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Columna de la derecha para los detalles de edición -->
+    <div class="col-md-6">
+        <h4 class="margin-top-custom">@(creationMode ? "Crear Nuevo Producto" : "Editar Producto")</h4>
+        @if (selectedProduct != null)
+        {
+            <div class="form-group">
+                <div class="row">
+                    <div class="col-md-6">
+                        <label for="id">ID</label>
+                        <input type="text" id="id" class="form-control" @bind="@selectedProduct.Id" readonly />
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="estado">Estado</label>
+                        <input type="text" id="estado" class="form-control" @bind="@selectedProduct.Estado" readonly />
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="nombre">Nombre</label>
+                <input type="text" id="nombre" class="form-control" @bind="selectedProduct.Nombre" disabled="@(!editionMode)" />
+            </div>
+            <div class="form-group">
+                <label for="descripcion">Descripción</label>
+                <input type="text" id="descripcion" class="form-control" @bind="selectedProduct.Descripcion" disabled="@(!editionMode)" />
+            </div>
+
+            <div class="form-group">
+                <div class="row">
+                    <div class="col-md-6">
+                        <label for="precioVenta">Precio de Venta</label>
+                        <input type="number" id="precioVenta" class="form-control" step="0.01" @bind="selectedProduct.PrecioVenta" disabled="@(!editionMode)" />
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="costoUltimaCompra">Costo Última Compra</label>
+                        <input type="number" id="costoUltimaCompra" class="form-control" step="0.01" @bind="selectedProduct.CostoUltimaCompra" readonly />
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="rutaImagen">Ruta de Imagen</label>
+                <div class="d-flex">
+                    <input type="text" id="rutaImagen" class="form-control me-2 w-70" @bind="selectedProduct.RutaImagen" disabled="@(!editionMode)" />
+                    <button class="btn btn-outline-secondary w-30" @onclick="AbrirDialogoImagen">
+                        <i class="bi bi-eye"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="categoria">Categoría</label>
+                <select id="categoria" class="form-control" @bind="selectedProduct.CategoriaId" disabled="@(!editionMode)">
+                    <option value="">Seleccione una categoría</option>
+                    @foreach (var categoria in categorias)
+                    {
+                        <option value="@categoria.Id">@categoria.Nombre</option>
+                    }
+                </select>
+            </div>
+
+        }
+
+        @if (selectedProduct?.Anulado ?? false)
+        {
+            <button class="btn btn-warning mt-3" @onclick="ActivarProducto">
+                <i class="bi bi-arrow-repeat"></i> Activar
+            </button>
+        }
+
+    </div>
+</div>
+
+@if (showDeleteConfirm)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Confirmar Eliminación</h5>
+                    <button type="button" class="btn-close" @onclick="() => showDeleteConfirm = false"></button>
+                </div>
+                <div class="modal-body">
+                    <p>¿Estás seguro de que deseas eliminar el producto "<strong>@(selectedProduct?.Nombre ?? "")</strong>"?</p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="() => showDeleteConfirm = false">Cancelar</button>
+                    <button class="btn btn-danger" @onclick="DeleteProduct">Eliminar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (mostrarDialogoImagen)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Producto: <strong>@(selectedProduct?.Nombre ?? "")</strong> </h5>
+                    <button type="button" class="btn-close" @onclick="CerrarDialogoImagen"></button>
+                </div>
+                <div class="modal-body text-center">                   
+                    @if (!string.IsNullOrWhiteSpace(selectedProduct.RutaImagen))
+                    {
+                        <img src="@selectedProduct.RutaImagen" class="img-fluid rounded" alt="Imagen del producto" />
+                    }
+                    else
+                    {
+                        <p>No hay imagen disponible</p>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+
+@code {
+    private List<ProductosItem> productos = new List<ProductosItem>();
+    private ProductosItem selectedProduct;
+    private ProductosItem lastProduct;
+    private List<CategoriasItem> categorias = new List<CategoriasItem>();
+
+    private bool editionMode = false;
+    private bool creationMode = false;
+    private bool isProductSelected = false;
+    private string searchText = "";
+    private string alertMessage = "";
+    private bool showDeleteConfirm = false;
+    private bool isSuccess = false;
+    private bool isError = false;
+    private bool mostrarDialogoImagen = false;
+
+    private ElementReference scrollContainer;
+
+    // Este método se ejecuta cuando la página se carga
+    protected override async Task OnInitializedAsync()
+    {
+        var appServerAddress = _configuration.GetConnectionString("DefaultConnection");
+        _proxy.BaseAdress = "https://localhost:7051/";//"http://localhost:8085/";
+
+        await CargarCategorias();
+        await RefreshLista();
+        selectedProduct = productos.FirstOrDefault();
+        StateHasChanged();
+    }
+
+    private async Task CargarCategorias()
+    {
+        var response = await _proxy.GetPagedResponseAsync<CategoriasResponse>(ApiRoutes.Categorias.GetAll,
+                                                                  new FilterQuery
+                                                                      {
+                                                                          DynamicQuery = "Anulado == @0",
+                                                                          QueryParams = "false"
+                                                                      },
+                                                                  new PaginationQuery());
+        categorias.Clear();
+        foreach (var item in response.Data)
+        {
+            CategoriasItem categoria = new CategoriasItem
+                {
+                    Id = item.Id,
+                    Nombre = item.Nombre,
+                    Descripcion = item.Descripcion,
+                    Anulado = item.Anulado,
+                    Estado = item.Anulado ? "Inactivo" : "Activo"
+                };
+
+            categorias.Add(categoria);
+        }
+    }   
+
+    private void AbrirDialogoImagen()
+    {
+        mostrarDialogoImagen = true;
+    }
+
+    private void CerrarDialogoImagen()
+    {
+        mostrarDialogoImagen = false;
+    }
+
+    private void CloseAlert()
+    {
+        isSuccess = false;
+        isError = false;
+    }
+
+    private void LimpiarFiltro()
+    {
+        searchText = "";
+        SearchProducts();
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        // Verifica si la tecla presionada es "Enter"
+        if (e.Key == "Enter")
+        {
+            SearchProducts();
+        }
+    }
+
+    private async void SearchProducts()
+    {
+
+        await RefreshLista();
+
+        selectedProduct = productos.FirstOrDefault();
+        //selectedProduct = productos.FirstOrDefault(x => x.Nombre.ToLower().Contains((searchText??"").ToLower()));
+        StateHasChanged();
+
+    }
+
+    void SelectProduct(ProductosItem producto)
+    {
+        if (!editionMode)
+        {
+            selectedProduct = producto; // Guarda el producto seleccionada
+        }
+    }
+
+    string GetRowClass(ProductosItem producto)
+    {
+        // Si el registro está inactivo, se pinta de rojo
+        if (producto.Anulado)
+        {
+            return "table-danger";
+        }
+
+        // Si el registro es el seleccionado, se pinta de gris
+        if (selectedProduct == producto)
+        {
+            return "table-secondary";
+        }
+
+        return ""; // Sin clases adicionales
+    }
+
+
+    private void LoadProductDetails(ProductosItem producto)
+    {
+        selectedProduct = producto;
+        editionMode = false;
+        creationMode = false;
+        isProductSelected = true;
+    }
+
+    private void CreateNewProduct()
+    {
+        if (selectedProduct != null)
+        {
+            lastProduct = selectedProduct.Clone();
+        }
+
+        selectedProduct = new ProductosItem();
+        creationMode = true;
+        editionMode = true;
+    }
+
+    private void EditProduct()
+    {
+        if (selectedProduct != null)
+        {
+            lastProduct = selectedProduct.Clone();
+            selectedProduct = lastProduct.Clone();
+            editionMode = true;
+            creationMode = false;
+        }
+    }
+
+    private void CancelEdit()
+    {
+
+        selectedProduct = lastProduct.Clone();
+        StateHasChanged();
+
+        editionMode = false;
+        creationMode = false;
+    }
+
+    private void ConfirmDeleteProduct()
+    {
+        showDeleteConfirm = true;
+    }
+
+    private async Task RefreshLista()
+    {
+        var response = await _proxy.GetPagedResponseAsync<ProductosResponse>(ApiRoutes.Productos.GetAll,
+                                                                 new FilterQuery { Code = searchText ?? "" },
+                                                                 new PaginationQuery());
+        productos.Clear();
+        foreach (var item in response.Data)
+        {
+            ProductosItem producto = new ProductosItem
+                {
+                    Id = item.Id,
+                    Nombre = item.Nombre,
+                    Descripcion = item.Descripcion,
+                    Anulado = item.Anulado,
+                    Estado = item.Anulado ? "Inactivo" : "Activo",
+                    CategoriaId = item.CategoriaId,
+                    CostoUltimaCompra = item.CostoUltimaCompra,
+                    PrecioVenta = item.PrecioVenta,
+                    RutaImagen = item.RutaImagen
+                };
+
+            productos.Add(producto);
+        }
+    }
+
+    private async Task DeleteProduct()
+    {
+        if (selectedProduct != null)
+        {
+            showDeleteConfirm = false;
+
+            var response = await _proxy.DeactivateProductosAsync(selectedProduct.Id);
+
+            if (response?.IsSuccessStatusCode ?? false)
+            {
+                alertMessage = "El producto fue anulado con éxito";
+                isSuccess = true;
+                isError = false;
+
+                var productoEdit = selectedProduct;
+
+                await RefreshLista();
+                selectedProduct = productos.FirstOrDefault(x => x.Id == productoEdit.Id);
+                StateHasChanged();
+
+            }
+            else
+            {
+                alertMessage = "Ha ocurrido un error al intentar anular el producto";
+                isSuccess = false;
+                isError = true;
+            }
+
+        }
+
+    }
+
+    private async Task ActivarProducto()
+    {
+        if (selectedProduct != null)
+        {
+            var response = await _proxy.ActivateProductosAsync(selectedProduct.Id);
+
+            if (response?.IsSuccessStatusCode ?? false)
+            {
+                alertMessage = "El producto fue activado con éxito";
+                isSuccess = true;
+                isError = false;
+
+                var productoEdit = selectedProduct;
+
+                await RefreshLista();
+                selectedProduct = productos.FirstOrDefault(x => x.Id == productoEdit.Id);
+                StateHasChanged();
+
+            }
+            else
+            {
+                alertMessage = "Ha ocurrido un error al intentar activar el producto";
+                isSuccess = false;
+                isError = true;
+            }
+
+        }
+
+    }
+
+    private async Task SaveProduct()
+    {
+        if (selectedProduct == null)
+        {
+            alertMessage = "No se encontro ningun producto seleccionado";
+            isSuccess = false;
+            isError = true;
+            return;
+        }
+
+        if (String.IsNullOrEmpty(selectedProduct.Nombre))
+        {
+            alertMessage = "El nombre del producto es obligatorio";
+            isSuccess = false;
+            isError = true;
+            return;
+        }
+
+        if (String.IsNullOrEmpty(selectedProduct.Descripcion))
+        {
+            alertMessage = "La descripción del producto es obligatorio";
+            isSuccess = false;
+            isError = true;
+            return;
+        }
+
+        ProductosRequest request = new ProductosRequest
+            {
+                Nombre = selectedProduct.Nombre,
+                Descripcion = selectedProduct.Descripcion,
+                CategoriaId = selectedProduct.CategoriaId,
+                PrecioVenta = selectedProduct.PrecioVenta,
+                RutaImagen = selectedProduct.RutaImagen,
+            };
+
+        if (creationMode)
+        {
+            var response = await _proxy.CreateProductosAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                alertMessage = "El producto ha sido creado con éxito";
+                isSuccess = true;
+                isError = false;
+
+                editionMode = false;
+                creationMode = false;
+
+                await RefreshLista();
+
+            }
+            else
+            {
+                alertMessage = "Ha ocurrido un error al intentar crear un nuevo producto";
+                isSuccess = false;
+                isError = true;
+            }
+        }
+        else
+        {
+            request.Id = selectedProduct.Id;
+            var response = await _proxy.UpdateProductosAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                alertMessage = "El producto ha sido editado con éxito";
+                isSuccess = true;
+                isError = false;
+
+                editionMode = false;
+                creationMode = false;
+
+                var productoEdit = selectedProduct;
+
+                await RefreshLista();
+                selectedProduct = productos.FirstOrDefault(x => x.Id == productoEdit.Id);
+                StateHasChanged();
+            }
+            else
+            {
+                alertMessage = "Ha ocurrido un error al intentar editar el producto";
+                isSuccess = false;
+                isError = true;
+            }
+        }
+
+    }
+
+
+    // Método para manejar el evento de scroll
+    private async Task OnScroll()
+    {
+        var scrollHeight = await JSRuntime.InvokeAsync<int>("getScrollHeight", scrollContainer);
+        var scrollTop = await JSRuntime.InvokeAsync<int>("getScrollTop", scrollContainer);
+        var clientHeight = await JSRuntime.InvokeAsync<int>("getClientHeight", scrollContainer);
+
+        if (scrollTop + clientHeight >= scrollHeight)
+        {
+            Console.WriteLine("Se llegó al final del scroll");
+        }
+    }
+}

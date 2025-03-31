@@ -1,0 +1,61 @@
+﻿<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="">NetBy.WebApp</a>
+        <button title="Navigation menu" class="navbar-toggler" @onclick="ToggleNavMenu">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+    </div>
+</div>
+
+<div class="@NavMenuCssClass nav-scrollable" @onclick="ToggleNavMenu">
+    <nav class="flex-column">
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
+            </NavLink>
+        </div>        
+        <div class="nav-item px-3">
+            <NavLink class="nav-link d-flex align-items-center" href="categorias">
+                <span class="bi bi-grid" style="font-size: 1.5rem; display: inline-flex; align-items: center;" aria-hidden="true"></span> Categorias
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link d-flex align-items-center" href="productos">
+                <span class="bi bi-box" style="font-size: 1.5rem; display: inline-flex; align-items: center;" aria-hidden="true"></span> Productos
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link d-flex align-items-center" href="compras">
+                <span class="bi bi-cart-fill" style="font-size: 1.5rem; display: inline-flex; align-items: center;" aria-hidden="true"></span> Compra
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link d-flex align-items-center" href="ventas">
+                <span class="bi bi-bag-check-fill" style="font-size: 1.5rem; display: inline-flex; align-items: center;" aria-hidden="true"></span> Venta
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link d-flex align-items-center" href="stock">
+                <span class="bi bi-archive" style="font-size: 1.5rem; display: inline-flex; align-items: center;" aria-hidden="true"></span> Informe stock
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link d-flex align-items-center" href="kardex">
+                <span class="bi bi-file-earmark-text-fill" style="font-size: 1.5rem; display: inline-flex; align-items: center;" aria-hidden="true"></span> Informe kardex
+            </NavLink>
+        </div>
+    </nav>
+</div>
+
+
+
+@code {
+    private bool collapseNavMenu = true;
+
+    private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
+
+    private void ToggleNavMenu()
+    {
+        collapseNavMenu = !collapseNavMenu;
+    }
+}

@@ -1,0 +1,468 @@
+﻿@page "/categorias"
+
+@using NetBy.Common.Response
+@using NetBy.Common.Request
+@using NetBy.Common
+@using NetBy.Proxy
+@using NetBy.WebApp.Models
+
+@inject IProxy _proxy
+@inject IConfiguration _configuration;
+@inject IJSRuntime JSRuntime
+
+<div class="toolbar d-flex justify-content-start align-items-center p-2 bg-light shadow-sm">
+    <button class="btn btn-primary me-2" title="Nuevo" @onclick="CreateNewCategory" disabled="@(editionMode)">
+        <i class="bi bi-file-earmark-plus"></i>
+    </button>
+    <button class="btn btn-warning me-2" title="Editar" @onclick="EditCategory" disabled="@(editionMode)">
+        <i class="bi bi-pencil-square"></i>
+    </button>
+    <button class="btn btn-outline-danger" title="Anular" @onclick="ConfirmDeleteCategory" disabled="@(editionMode)">
+        <i class="bi bi-trash"></i>
+    </button>
+    <button class="btn btn-success me-2" title="Guardar" @onclick="SaveCategory" disabled="@(!editionMode)">
+        <i class="bi bi-save"></i>
+    </button>
+    <button class="btn btn-danger me-2" title="Cancelar" @onclick="CancelEdit" disabled="@(!editionMode)">
+        <i class="bi bi-x-circle"></i>
+    </button>
+
+</div>
+
+<!-- Alerta de éxito -->
+@if (isSuccess)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <strong>¡Éxito!</strong> @alertMessage
+        <button type="button" class="btn-close" @onclick="CloseAlert" aria-label="Close"></button>
+    </div>
+}
+
+<!-- Alerta de error -->
+@if (isError)
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <strong>Error!</strong> @alertMessage
+        <button type="button" class="btn-close" @onclick="CloseAlert" aria-label="Close"></button>
+    </div>
+}
+
+<div class="row">
+   
+    <!-- Columna de la izquierda para la lista -->
+    <div class="col-md-6">
+        <h3>Listado</h3>
+
+        <div class="d-flex justify-content-between align-items-center">
+            <!-- Campo de búsqueda -->
+            <input type="text" class="form-control me-2" placeholder="Buscar categorías..."
+                   @bind="searchText"
+                   disabled="@(editionMode)"
+                   @onkeydown="HandleKeyDown" style="flex: 1;" />
+
+            <div class="d-flex">
+                <button class="btn btn-outline-secondary me-2" title="Buscar..." @onclick="SearchCategories" disabled="@(editionMode)">
+                    <i class="bi bi-search"></i>
+                </button>
+                <button class="btn btn-outline-secondary" title="Limpiar..." @onclick="LimpiarFiltro" disabled="@(editionMode)">
+                    <i class="bi bi-x"></i> 
+                </button>
+            </div>
+        </div>
+
+        <div class="scroll-container">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Nombre</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var categoria in categorias)
+                    {
+                        <tr @onclick="() => SelectCategory(categoria)"
+                            class="@GetRowClass(categoria)"
+                            style="@(editionMode ? "pointer-events: none; opacity: 0.5;" : "")">
+                            <td>@categoria.Id</td>
+                            <td>@categoria.Nombre</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Columna de la derecha para los detalles de edición -->
+    <div class="col-md-6">
+        <h4 class="margin-top-custom">@(creationMode ? "Crear Nueva Categoría" : "Editar Categoría")</h4>
+        @if (selectedCategory != null)
+        {
+            <div class="form-group">
+                <div class="row">
+                    <div class="col-md-6">
+                        <label for="id">ID</label>
+                        <input type="text" id="id" class="form-control" @bind="@selectedCategory.Id" readonly />
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="estado">Estado</label>
+                        <input type="text" id="estado" class="form-control" @bind="@selectedCategory.Estado" readonly />
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="nombre">Nombre</label>
+                <input type="text" id="nombre" class="form-control" @bind="selectedCategory.Nombre" disabled="@(!editionMode)" />
+            </div>
+            <div class="form-group">
+                <label for="descripcion">Descripción</label>
+                <input type="text" id="descripcion" class="form-control" @bind="selectedCategory.Descripcion" disabled="@(!editionMode)" />
+            </div>
+        }
+
+        @if (selectedCategory?.Anulado ?? false)
+        {
+            <button class="btn btn-warning mt-3" @onclick="ActivarCategoria">
+                <i class="bi bi-arrow-repeat"></i> Activar
+            </button>
+        }
+
+    </div>   
+
+</div>
+
+@if (showDeleteConfirm)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Confirmar Eliminación</h5>
+                    <button type="button" class="btn-close" @onclick="() => showDeleteConfirm = false"></button>
+                </div>
+                <div class="modal-body">
+                    <p>¿Estás seguro de que deseas eliminar la categoría "<strong>@(selectedCategory?.Nombre??"")</strong>"?</p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="() => showDeleteConfirm = false">Cancelar</button>
+                    <button class="btn btn-danger" @onclick="DeleteCategory">Eliminar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+
+@code {
+    private List<CategoriasItem> categorias = new List<CategoriasItem>();
+    private CategoriasItem selectedCategory;
+    private CategoriasItem lastCategory;
+    private bool editionMode = false;
+    private bool creationMode = false;
+    private bool isCategorySelected = false;
+    private string searchText = "";
+    private string alertMessage = "";
+    private bool showDeleteConfirm = false;
+    private bool isSuccess = false;
+    private bool isError = false;
+
+    private ElementReference scrollContainer;
+
+    // Este método se ejecuta cuando la página se carga
+    protected override async Task OnInitializedAsync()
+    {
+        var appServerAddress = _configuration.GetConnectionString("DefaultConnection");
+        _proxy.BaseAdress = "https://localhost:7051/";//"http://localhost:8085/";
+
+
+        await RefreshLista();
+        selectedCategory = categorias.FirstOrDefault();
+        StateHasChanged();
+    }
+
+    private void CloseAlert()
+    {
+        isSuccess = false;
+        isError = false;
+    }
+
+    private void LimpiarFiltro()
+    {
+        searchText = "";
+        SearchCategories();
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        // Verifica si la tecla presionada es "Enter"
+        if (e.Key == "Enter")
+        {
+            SearchCategories();
+        }
+    }
+
+    private async void SearchCategories()
+    {
+
+        await RefreshLista();
+
+        selectedCategory = categorias.FirstOrDefault();
+        //selectedCategory = categorias.FirstOrDefault(x => x.Nombre.ToLower().Contains((searchText??"").ToLower()));
+        StateHasChanged();
+
+    }
+
+    void SelectCategory(CategoriasItem categoria)
+    {
+        if (!editionMode)
+        {
+            selectedCategory = categoria; // Guarda la categoría seleccionada
+        }
+    }
+
+    string GetRowClass(CategoriasItem categoria)
+    {
+        // Si el registro está inactivo, se pinta de rojo
+        if (categoria.Anulado)
+        {
+            return "table-danger";
+        }
+
+        // Si el registro es el seleccionado, se pinta de gris
+        if (selectedCategory == categoria)
+        {
+            return "table-secondary";
+        }
+
+        return ""; // Sin clases adicionales
+    }
+
+
+    private void LoadCategoryDetails(CategoriasItem categoria)
+    {
+        selectedCategory = categoria;
+        editionMode = false;
+        creationMode = false;
+        isCategorySelected = true;
+    }
+
+    private void CreateNewCategory()
+    {
+        if (selectedCategory != null)
+        {
+            lastCategory = selectedCategory.Clone();           
+        }
+
+        selectedCategory = new CategoriasItem();
+        creationMode = true;
+        editionMode = true;
+    }
+
+    private void EditCategory()
+    {
+        if (selectedCategory != null)
+        {
+            lastCategory = selectedCategory.Clone();
+            selectedCategory = lastCategory.Clone();
+            editionMode = true;
+            creationMode = false;
+        }
+    }
+
+    private void CancelEdit()
+    {
+
+        selectedCategory = lastCategory.Clone();
+        StateHasChanged();
+
+        editionMode = false;
+        creationMode = false;
+    }
+
+    private void ConfirmDeleteCategory()
+    {
+        showDeleteConfirm = true;
+    }
+
+    private async Task RefreshLista()
+    {
+        var response = await _proxy.GetPagedResponseAsync<CategoriasResponse>(ApiRoutes.Categorias.GetAll,
+                                                                 new FilterQuery { Code = searchText ?? "" },
+                                                                 new PaginationQuery());
+        categorias.Clear();
+        foreach (var item in response.Data)
+        {
+            CategoriasItem categoria = new CategoriasItem
+                {
+                    Id = item.Id,
+                    Nombre = item.Nombre,
+                    Descripcion = item.Descripcion,
+                    Anulado = item.Anulado,
+                    Estado = item.Anulado ? "Inactivo" : "Activo"
+                };
+
+            categorias.Add(categoria);
+        }
+    }
+
+    private async Task DeleteCategory()
+    {
+        if (selectedCategory != null)
+        {
+            showDeleteConfirm = false;
+
+            var response = await _proxy.DeactivateCategoriasAsync(selectedCategory.Id);
+
+            if (response?.IsSuccessStatusCode ?? false)
+            {
+                alertMessage = "La categoria fue anulada con éxito";
+                isSuccess = true;
+                isError = false;
+
+                var categoriaEdit = selectedCategory;
+
+                await RefreshLista();
+                selectedCategory = categorias.FirstOrDefault(x => x.Id == categoriaEdit.Id);
+                StateHasChanged();
+
+            }
+            else
+            {
+                alertMessage = "Ha ocurrido un error al intentar anular la categoría";
+                isSuccess = false;
+                isError = true;
+            }
+
+        }
+
+    }
+
+    private async Task ActivarCategoria()
+    {
+        if (selectedCategory != null)
+        {
+            var response = await _proxy.ActivateCategoriasAsync(selectedCategory.Id);
+
+            if (response?.IsSuccessStatusCode ?? false)
+            {
+                alertMessage = "La categoria fue activada con éxito";
+                isSuccess = true;
+                isError = false;
+
+                var categoriaEdit = selectedCategory;
+
+                await RefreshLista();
+                selectedCategory = categorias.FirstOrDefault(x => x.Id == categoriaEdit.Id);
+                StateHasChanged();
+
+            }
+            else
+            {
+                alertMessage = "Ha ocurrido un error al intentar activar la categoría";
+                isSuccess = false;
+                isError = true;
+            }
+
+        }
+
+    }
+
+    private async Task SaveCategory()
+    {
+        if (selectedCategory == null)
+        {
+            alertMessage = "No se encontro ninguna categoria seleccionada";
+            isSuccess = false;
+            isError = true;
+            return;
+        }
+
+        if (String.IsNullOrEmpty(selectedCategory.Nombre))
+        {
+            alertMessage = "El nombre de la categoria es obligatorio";
+            isSuccess = false;
+            isError = true;
+            return;
+        }
+
+        if (String.IsNullOrEmpty(selectedCategory.Descripcion))
+        {
+            alertMessage = "La descripción de la categoria es obligatorio";
+            isSuccess = false;
+            isError = true;
+            return;
+        }
+
+        CategoriasRequest request = new CategoriasRequest
+            {
+                Nombre = selectedCategory.Nombre,
+                Descripcion = selectedCategory.Descripcion
+            };
+
+        if (creationMode)
+        {
+            var response = await _proxy.CreateCategoriasAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                alertMessage = "La categoria ha sido creada con éxito";
+                isSuccess = true;
+                isError = false;
+
+                editionMode = false;
+                creationMode = false;
+
+                await RefreshLista();
+
+            }
+            else
+            {
+                alertMessage = "Ha ocurrido un error al intentar crear una nueva categoría";
+                isSuccess = false;
+                isError = true;
+            }
+        }
+        else
+        {
+            request.Id = selectedCategory.Id;
+            var response = await _proxy.UpdateCategoriasAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                alertMessage = "La categoria ha sido editada con éxito";
+                isSuccess = true;
+                isError = false;
+
+                editionMode = false;
+                creationMode = false;
+
+                var categoriaEdit = selectedCategory;
+
+                await RefreshLista();
+                selectedCategory = categorias.FirstOrDefault(x => x.Id == categoriaEdit.Id);
+                StateHasChanged();
+            }
+            else
+            {
+                alertMessage = "Ha ocurrido un error al intentar editar una categoría";
+                isSuccess = false;
+                isError = true;
+            }
+        }
+       
+    }
+
+
+    // Método para manejar el evento de scroll
+    private async Task OnScroll()
+    {
+        var scrollHeight = await JSRuntime.InvokeAsync<int>("getScrollHeight", scrollContainer);
+        var scrollTop = await JSRuntime.InvokeAsync<int>("getScrollTop", scrollContainer);
+        var clientHeight = await JSRuntime.InvokeAsync<int>("getClientHeight", scrollContainer);
+
+        if (scrollTop + clientHeight >= scrollHeight)
+        {
+            Console.WriteLine("Se llegó al final del scroll");
+        }
+    }
+}
